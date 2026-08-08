@@ -13,11 +13,25 @@ class CoffeeStateManagement with ChangeNotifier {
   // ---------------------------------------------------------------------------
   // Firebase
   // ---------------------------------------------------------------------------
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final bool firebaseEnabled;
+  FirebaseFirestore? _firestore;
+
+  CoffeeStateManagement({this.firebaseEnabled = true}) {
+    if (firebaseEnabled) {
+      _firestore = FirebaseFirestore.instance;
+    }
+  }
+
+  FirebaseFirestore get _effectiveFirestore {
+    if (!firebaseEnabled) {
+      throw StateError('Firebase is not configured.');
+    }
+    return _firestore ??= FirebaseFirestore.instance;
+  }
 
   /// The `coffee_records` collection in Firestore.
   CollectionReference<Map<String, dynamic>> get coffeeRecordsCollection =>
-      _firestore.collection(AppConstant.coffeeRecordsCollection);
+      _effectiveFirestore.collection(AppConstant.coffeeRecordsCollection);
 
   /// Set while a write is in flight, so screens can show a spinner.
   bool isSaving = false;
@@ -36,18 +50,29 @@ class CoffeeStateManagement with ChangeNotifier {
 
   /// Raw snapshots, ordered newest first. Feed this straight into a
   /// `StreamBuilder<QuerySnapshot<Map<String, dynamic>>>`.
-  Stream<QuerySnapshot<Map<String, dynamic>>> get coffeeRecordsSnapshots =>
-      coffeeRecordsCollection.orderBy("date", descending: true).snapshots();
+  Stream<QuerySnapshot<Map<String, dynamic>>> get coffeeRecordsSnapshots {
+    if (!firebaseEnabled) {
+      return Stream<QuerySnapshot<Map<String, dynamic>>>.error(
+        'Firebase is not configured. Please update firebase_options.dart with your Firebase project values.',
+      );
+    }
+
+    return coffeeRecordsCollection
+        .orderBy("date", descending: true)
+        .snapshots();
+  }
 
   /// The same stream, already mapped into model objects.
   Stream<List<CoffeeRecordsModel>> get coffeeRecordsStream =>
       coffeeRecordsSnapshots.map(
-        (snapshot) => snapshot.docs
-            .map(
-              (doc) =>
-                  CoffeeRecordsModel.fromJson(doc.data()).copyWith(docId: doc.id),
-            )
-            .toList(),
+        (snapshot) =>
+            snapshot.docs
+                .map(
+                  (doc) => CoffeeRecordsModel.fromJson(
+                    doc.data(),
+                  ).copyWith(docId: doc.id),
+                )
+                .toList(),
       );
 
   // ---------------------------------------------------------------------------
@@ -56,17 +81,24 @@ class CoffeeStateManagement with ChangeNotifier {
 
   /// Reads the collection once (no live updates) and refreshes [items].
   Future<List<CoffeeRecordsModel>> fetchCoffeeRecordsOnce() async {
-    try {
-      final snapshot = await coffeeRecordsCollection
-          .orderBy("date", descending: true)
-          .get();
+    if (!firebaseEnabled) {
+      errorMessage = 'Firebase is not configured.';
+      notifyListeners();
+      return [];
+    }
 
-      items = snapshot.docs
-          .map(
-            (doc) =>
-                CoffeeRecordsModel.fromJson(doc.data()).copyWith(docId: doc.id),
-          )
-          .toList();
+    try {
+      final snapshot =
+          await coffeeRecordsCollection.orderBy("date", descending: true).get();
+
+      items =
+          snapshot.docs
+              .map(
+                (doc) => CoffeeRecordsModel.fromJson(
+                  doc.data(),
+                ).copyWith(docId: doc.id),
+              )
+              .toList();
 
       errorMessage = null;
       notifyListeners();
@@ -87,6 +119,12 @@ class CoffeeStateManagement with ChangeNotifier {
   Future<String?> sendCoffeeRecordToFirebase(
     CoffeeRecordsModel coffeeRecord,
   ) async {
+    if (!firebaseEnabled) {
+      errorMessage = 'Firebase is not configured.';
+      notifyListeners();
+      return null;
+    }
+
     _setSaving(true);
     try {
       final docRef = await coffeeRecordsCollection.add(coffeeRecord.toJson());
@@ -127,6 +165,12 @@ class CoffeeStateManagement with ChangeNotifier {
 
   /// Overwrites an existing document. [docId] must come from Firestore.
   Future<bool> updateCoffeeRecord(CoffeeRecordsModel coffeeRecord) async {
+    if (!firebaseEnabled) {
+      errorMessage = 'Firebase is not configured.';
+      notifyListeners();
+      return false;
+    }
+
     final docId = coffeeRecord.docId;
     if (docId == null || docId.isEmpty) {
       errorMessage = "This record has no document id, so it cannot be updated.";
@@ -154,6 +198,12 @@ class CoffeeStateManagement with ChangeNotifier {
     String? des,
     double? amount,
   }) async {
+    if (!firebaseEnabled) {
+      errorMessage = 'Firebase is not configured.';
+      notifyListeners();
+      return false;
+    }
+
     _setSaving(true);
     try {
       final data = <String, dynamic>{};
@@ -179,6 +229,12 @@ class CoffeeStateManagement with ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   Future<bool> deleteCoffeeRecord(String docId) async {
+    if (!firebaseEnabled) {
+      errorMessage = 'Firebase is not configured.';
+      notifyListeners();
+      return false;
+    }
+
     _setSaving(true);
     try {
       await coffeeRecordsCollection.doc(docId).delete();

@@ -5,25 +5,49 @@ import 'package:summer_iub_app/firebase_options.dart';
 import 'package:summer_iub_app/screens/home.dart';
 import 'package:summer_iub_app/state_management/coffee_state_management.dart';
 
-void main() async {
+Future<void> main() async {
   // Required before any plugin work happens in main().
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  final bool firebaseEnabled = await _initializeFirebaseIfConfigured();
 
-  runApp(const MyApp());
+  runApp(MyApp(firebaseEnabled: firebaseEnabled));
+}
+
+Future<bool> _initializeFirebaseIfConfigured() async {
+  if (!DefaultFirebaseOptions.hasValidConfig) {
+    debugPrint(
+      'Firebase is not configured. Running in offline-only mode. '
+      'Please update firebase_options.dart with your Firebase project values.',
+    );
+    return false;
+  }
+
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    return true;
+  } catch (e, st) {
+    debugPrint('Firebase initialization failed: $e\n$st');
+    return false;
+  }
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final bool firebaseEnabled;
+
+  const MyApp({super.key, required this.firebaseEnabled});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (context) => CoffeeStateManagement()),
+        ChangeNotifierProvider(
+          create:
+              (context) =>
+                  CoffeeStateManagement(firebaseEnabled: firebaseEnabled),
+        ),
       ],
       child: MaterialApp(
         title: 'Flutter Summer CSE464 class',

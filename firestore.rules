@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// ============================================================================
+//  Firestore rules for the CSE464 Flutter Bonus Assignment
+//
+//  The assignment asks for open read / write / update access, so these rules
+//  allow everything. This is fine for a classroom demo ONLY -- anyone with the
+//  project id can read and destroy the data. Never ship this to production.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Blanket access, exactly as specified in the assignment brief.
+    match /{document=**} {
+      allow read, write: if true;
+    }
+
+    // The same thing spelled out per-operation for the coffee_records
+    // collection, which is what the app actually uses. (Kept for clarity --
+    // the rule above already covers it.)
+    match /coffee_records/{recordId} {
+      allow read: if true;    // get + list, used by the StreamBuilder
+      allow create: if true;  // used by sendCoffeeRecordToFirebase
+      allow update: if true;  // used by updateCoffeeRecord
+      allow delete: if true;  // used by deleteCoffeeRecord
+    }
+  }
+}
